@@ -7,29 +7,21 @@
 
 #define RANK_ROOT 0
 
-constexpr auto n1 = 4;
+constexpr auto n1 = 9;
 constexpr auto n2 = 4;
-constexpr auto n3 = 4;
+constexpr auto n3 = 2;
 
 void fillMatrix(std::vector<int> &A, std::vector<int> &B) {
     A.resize(n1 * n2);
     for (int i = 0; i < n1; i++) {
         for (int j = 0; j < n2; j++) {
-            if (i == j) {
-                A[j + i * n2] = 2;
-            } else {
-                A[j + i * n2] = 1;
-            }
+            A[j + i * n2] = j + i * n2 + 1;
         }
     }
     B.resize(n2 * n3);
     for (int i = 0; i < n2; i++) {
         for (int j = 0; j < n3; j++) {
-            if (i == j) {
-                B[j + i * n3] = 2;
-            } else {
-                B[j + i * n2] = 1;
-            }
+            B[j + i * n3] = j + i * n3 + 1;
         }
     }
 }
@@ -42,7 +34,7 @@ void gathervRoutine(std::vector<int> &resultMatrix, std::vector<int> &recvcounts
     displs.resize(size);
     for (int i = 0; i < dims0; i++) {
         for (int j = 0; j < dims1; j++) {
-            displs[j + i * dims1] = (j * tmpMatrixColumn + i * tmpMatrixColumn * n1) / 2;
+            displs[j + i * dims1] = (j * tmpMatrixColumn + i * n3 * n1 / dims0);
         }
     }
 }
@@ -115,23 +107,6 @@ void Run() {
 
     std::vector<int> multiplyRes(n1 / dims[0] * tmpMatrixColumn);
 
-    /*for (int i = 0; i < n1 / dims[0]; i++) {
-        for (int j = 0; j < tmpMatrixColumn; j++) {
-            int sum = 0;
-            for (int k = 0; k < n2; k++) {
-                sum += partA[i * n2 + k] * partB[k * tmpMatrixColumn + j];
-            }
-            multiplyRes[i * tmpMatrixColumn + j] = sum;
-        }
-    }*/
-
-    /*sleep(rank);
-    for (int i = 0; i < dims[0]; i++) {
-        for (int j = 0; j < dims[1]; j++) {
-            std::cout << multiplyRes[i * dims[1] + j] << " ";
-        }
-        std::cout << '\n';
-    }*/
     matrixMultiply(partA, partB, multiplyRes, n1 / dims[0], tmpMatrixColumn);
 
     MPI_Datatype matrix_back, matrix_back_resized;
@@ -145,10 +120,21 @@ void Run() {
     std::vector<int> displs;
     if (rank == RANK_ROOT) {
         gathervRoutine(resultMatrix, recvcounts, displs, size, dims[0], dims[1], tmpMatrixColumn);
+        for (auto i : displs) {
+            std::cout << i << ' ';
+        }
+        std::cout << '\n';
     }
 
+/*    sleep(rank);
+    for (auto i : multiplyRes) {
+        std::cout << i << ' ';
+    }
+    std::cout << '\n';*/
 
-    MPI_Gatherv(multiplyRes.data(), 4, MPI_INT, resultMatrix.data(), recvcounts.data(), displs.data(), matrix_back_resized, RANK_ROOT, MPI_COMM_WORLD);
+
+    MPI_Gatherv(multiplyRes.data(), multiplyRes.size(), MPI_INT, resultMatrix.data(), recvcounts.data(), displs.data(),
+                matrix_back_resized, RANK_ROOT, MPI_COMM_WORLD);
     if (rank == RANK_ROOT) {
         for (int i = 0; i < n1; i++) {
             for (int j = 0; j < n3; j++) {
