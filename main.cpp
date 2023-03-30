@@ -5,22 +5,22 @@
 
 #define RANK_ROOT 0
 
-constexpr auto n1 = 9;
-constexpr auto n2 = 4;
-constexpr auto n3 = 4;
+constexpr auto n1 = 2100;
+constexpr auto n2 = 2100;
+constexpr auto n3 = 2100;
 
 
 void fillMatrix(std::vector<int> &A, std::vector<int> &B) {
     A.resize(n1 * n2);
     for (int i = 0; i < n1; i++) {
         for (int j = 0; j < n2; j++) {
-            A[j + i * n2] = j + i * n2 + 1;
+            A[j + i * n2] = (i == j) ? 2 : 1;
         }
     }
     B.resize(n2 * n3);
     for (int i = 0; i < n2; i++) {
         for (int j = 0; j < n3; j++) {
-            B[j + i * n3] = j + i * n3 + 1;
+            B[j + i * n3] = (i == j) ? 2 : 1;
         }
     }
  }
@@ -95,14 +95,24 @@ void regComm2D(int size, int dims[2], int periods[2], MPI_Comm &comm2d, int reor
     MPI_Cart_get(comm2d, 2, dims, periods, coords);
 }
 
+bool checkProcessCorrectness(int dims_0, int dims_1) {
+    if (n3 % dims_1 != 0 || n1 % dims_0 != 0) {
+        std::cout << ("Wrong process count") << std::endl;
+        return false;
+    }
+    return true;
+}
 
-void Run(int size, int rank) {
+int Run(int size, int rank) {
     int dims[2] = {0, 0}, periods[2] = {0, 0}, coords[2], reorder = 0;
 
     MPI_Comm comm2d;
 
     regComm2D(size, dims, periods, comm2d, reorder, coords);
 
+    if (!checkProcessCorrectness(dims[0], dims[1])) {
+        return EXIT_FAILURE;
+    }
     int tmpMatrixColumn = n3 / dims[1];
     int tmpMatrixLines = n1 / dims[0];
 
@@ -150,21 +160,36 @@ void Run(int size, int rank) {
                 matrix_back_resized, RANK_ROOT, MPI_COMM_WORLD);
 
     if (rank == RANK_ROOT) {
-        printMatrix(resultMatrix, n1, n3);
+        long long sum = 0;
+        for (int i = 0; i < n1; i++) {
+            for (int j = 0; j < n3; j++) {
+                if (i == j) {
+                    sum += resultMatrix[j + i * n3];
+                }
+            }
+        }
+        std::cout << sum << '\n';
     }
 
     freeMpiTypes(row_type, col_type, col_type_resized, matrix_back, matrix_back_resized);
+
+    return EXIT_SUCCESS;
 }
 
 
 int main(int argc, char **argv) {
+    int ret_value;
 
     MPI_Init(&argc, &argv);
     int size, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    Run(size, rank);
+    const double start_time_s = MPI_Wtime();
+    ret_value = Run(size, rank);
+    const double end_time_s = MPI_Wtime();
+    std::cout << "rank " << rank << ": " << end_time_s - start_time_s << '\n';
+
     MPI_Finalize();
-    return 0;
+    return ret_value;
 }
