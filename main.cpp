@@ -5,22 +5,22 @@
 
 #define RANK_ROOT 0
 
-constexpr auto n1 = 2100;
-constexpr auto n2 = 2100;
-constexpr auto n3 = 2100;
+constexpr auto n1 = 100;
+constexpr auto n2 = 100;
+constexpr auto n3 = 100;
 
 
 void fillMatrix(std::vector<int> &A, std::vector<int> &B) {
     A.resize(n1 * n2);
     for (int i = 0; i < n1; i++) {
         for (int j = 0; j < n2; j++) {
-            A[j + i * n2] = (i == j) ? 2 : 1;
+            A[j + i * n2] = (i == j) ? 10 : 6;
         }
     }
     B.resize(n2 * n3);
     for (int i = 0; i < n2; i++) {
         for (int j = 0; j < n3; j++) {
-            B[j + i * n3] = (i == j) ? 2 : 1;
+            B[j + i * n3] = (i == j) ? 23 : 7;
         }
     }
  }
@@ -41,8 +41,8 @@ void fillMatrix(std::vector<int> &A, std::vector<int> &B) {
 
 
  void matrixMultiply(std::vector<int> &partA, std::vector<int> &partB, std::vector<int> &multiplyRes,
-                     int matrixALines, int matrixBColumns) {
-     for (int i = 0; i < matrixALines; i++) {
+                     int matrixALines, int matrixBColumns, int matrixAColumns) {
+     /*for (int i = 0; i < matrixALines; i++) {
          for (int j = 0; j < matrixBColumns; j++) {
              int sum = 0;
              for (int k = 0; k < n2; k++) {
@@ -50,8 +50,32 @@ void fillMatrix(std::vector<int> &A, std::vector<int> &B) {
              }
              multiplyRes[i * matrixBColumns + j] = sum;
          }
+     }*/
+
+
+     for (int i = 0; i < matrixALines; i++) {
+         for (int k = 0; k < matrixAColumns; k++) {
+             for (int j = 0; j < matrixBColumns; j++) {
+                 multiplyRes[i * matrixBColumns + j] += partA[i * matrixAColumns + k] * partB[k * matrixBColumns + j];
+             }
+         }
      }
  }
+
+void file_print_matrix(int *A, int height, int width,char* file_name) {
+    FILE *file = fopen(file_name, "w");
+    fprintf(file, "[");
+    for (int i = 0; i < height; i++) {
+        fprintf(file, "[");
+        for (int j = 0; j < width; j++) {
+            fprintf(file, "%d, ", A[i * width + j]);
+        }
+        fprintf(file, "],");
+        fputs("\n", file);
+    }
+    fprintf(file, "]");
+    fclose(file);
+}
 
 
  void printMatrix(std::vector<int> &matrix, int columns, int lines) {
@@ -133,6 +157,8 @@ int Run(int size, int rank) {
 
     if (rank == RANK_ROOT) {
         fillMatrix(A, B);
+        file_print_matrix(A.data(), n1, n2, "./A.txt");
+        file_print_matrix(B.data(), n2, n3, "./B.txt");
     }
 
     if (coords[1] == 0) {
@@ -149,7 +175,7 @@ int Run(int size, int rank) {
 
     std::vector<int> multiplyRes(tmpMatrixLines * tmpMatrixColumn);
 
-    matrixMultiply(partA, partB, multiplyRes, tmpMatrixLines, tmpMatrixColumn);
+    matrixMultiply(partA, partB, multiplyRes, tmpMatrixLines, tmpMatrixColumn, n2);
 
     std::vector<int> resultMatrix, recvcounts, displs;
     if (rank == RANK_ROOT) {
@@ -160,15 +186,12 @@ int Run(int size, int rank) {
                 matrix_back_resized, RANK_ROOT, MPI_COMM_WORLD);
 
     if (rank == RANK_ROOT) {
-        long long sum = 0;
-        for (int i = 0; i < n1; i++) {
-            for (int j = 0; j < n3; j++) {
-                if (i == j) {
-                    sum += resultMatrix[j + i * n3];
-                }
-            }
+        file_print_matrix(multiplyRes.data(), n1, n2, "./C.txt");
+        char script[100];
+        sprintf(script, "python3 matrix_check.py");
+        if (system(script) != 0) {
+            perror("Script didn't run");
         }
-        std::cout << sum << '\n';
     }
 
     freeMpiTypes(row_type, col_type, col_type_resized, matrix_back, matrix_back_resized);
